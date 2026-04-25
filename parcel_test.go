@@ -32,24 +32,14 @@ func getTestParcel() Parcel {
 func TestAddGetDelete(t *testing.T) {
 	// prepare
 	db, err := sql.Open("sqlite", "tracker.db") // настройте подключение к БД
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 	store := NewParcelStore(db)
 	parcel := getTestParcel()
 
 	// add
 	// добавьте новую посылку в БД, убедитесь в отсутствии ошибки и наличии идентификатора
-	res, err := db.Exec("insert into parcel (client, status, address, created_at) values (:client, :status, :address, :created_at)",
-		sql.Named("client", parcel.Client),
-		sql.Named("status", parcel.Status),
-		sql.Named("address", parcel.Address),
-		sql.Named("created_at", parcel.CreatedAt))
-	if err != nil {
-		t.Fatal(err)
-	}
-	id, err := res.LastInsertId()
+	id, err := store.Add(parcel)
 	require.NoError(t, err)
 	require.NotZero(t, id)
 
@@ -66,7 +56,7 @@ func TestAddGetDelete(t *testing.T) {
 	// delete
 	// удалите добавленную посылку, убедитесь в отсутствии ошибки
 	// проверьте, что посылку больше нельзя получить из БД
-	_, err = db.Exec("delete from parcel where number = :number", sql.Named("number", id))
+	err = store.Delete(id)
 	require.NoError(t, err)
 	_, err = store.Get(int(id))
 	require.Error(t, err, "посылка не удалена")
@@ -76,23 +66,13 @@ func TestAddGetDelete(t *testing.T) {
 func TestSetAddress(t *testing.T) {
 	// prepare
 	db, err := sql.Open("sqlite", "tracker.db") // настройте подключение к БД
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 	store := NewParcelStore(db)
 	parcel := getTestParcel()
 	// add
 	// добавьте новую посылку в БД, убедитесь в отсутствии ошибки и наличии идентификатора
-	res, err := db.Exec("insert into parcel (client, status, address, created_at) values (:client, :status, :address, :created_at)",
-		sql.Named("client", parcel.Client),
-		sql.Named("status", parcel.Status),
-		sql.Named("address", parcel.Address),
-		sql.Named("created_at", parcel.CreatedAt))
-	if err != nil {
-		t.Fatal(err)
-	}
-	id, err := res.LastInsertId()
+	id,err := store.Add(parcel)
 	require.NoError(t, err)
 	require.NotZero(t, id)
 
@@ -100,7 +80,7 @@ func TestSetAddress(t *testing.T) {
 	// set address
 	// обновите адрес, убедитесь в отсутствии ошибки
 	newAddress := "new test address"
-	_,err = db.Exec("update parcel set address = :address where number = :number", sql.Named("address", newAddress), sql.Named("number", id))
+	err = store.SetAddress(id,newAddress)
 	require.NoError(t, err)
 
 	// check
@@ -114,23 +94,13 @@ func TestSetAddress(t *testing.T) {
 func TestSetStatus(t *testing.T) {
 	// prepare
 	db, err := sql.Open("sqlite", "tracker.db") // настройте подключение к БД
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 	store := NewParcelStore(db)
 	parcel := getTestParcel()
 	// add
 	// добавьте новую посылку в БД, убедитесь в отсутствии ошибки и наличии идентификатора
-	res, err := db.Exec("insert into parcel (client, status, address, created_at) values (:client, :status, :address, :created_at)",
-		sql.Named("client", parcel.Client),
-		sql.Named("status", parcel.Status),
-		sql.Named("address", parcel.Address),
-		sql.Named("created_at", parcel.CreatedAt))
-	if err != nil {
-		t.Fatal(err)
-	}
-	id, err := res.LastInsertId()
+	id,err := store.Add(parcel)
 	require.NoError(t, err)
 	require.NotZero(t, id)
 
@@ -138,7 +108,7 @@ func TestSetStatus(t *testing.T) {
 	// set status
 	// обновите статус, убедитесь в отсутствии ошибки
 	newStatus := ParcelStatusSent
-	_,err = db.Exec("update parcel set status = :status where number = :number", sql.Named("status", newStatus), sql.Named("number", id))
+	err = store.SetStatus(id, newStatus)
 	require.NoError(t, err)
 
 	// check
@@ -153,9 +123,7 @@ func TestSetStatus(t *testing.T) {
 func TestGetByClient(t *testing.T) {
 	// prepare
 	db, err := sql.Open("sqlite", "tracker.db") // настройте подключение к БД
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 	store := NewParcelStore(db)
 
@@ -174,24 +142,15 @@ func TestGetByClient(t *testing.T) {
 
 	// add // добавьте новую посылку в БД, убедитесь в отсутствии ошибки и наличии идентификатора
 	for i := 0; i < len(parcels); i++ {
-		res, err := db.Exec("insert into parcel (client, status, address, created_at) values (:client, :status, :address, :created_at)",
-			sql.Named("client", parcels[i].Client),
-			sql.Named("status", parcels[i].Status),
-			sql.Named("address", parcels[i].Address),
-			sql.Named("created_at", parcels[i].CreatedAt))
-		if err != nil {
-			t.Fatal(err)
-		}
-		id, err := res.LastInsertId()
+		id,err := store.Add(parcels[i])
 		require.NoError(t, err)
 		require.NotZero(t, id)
-		lastId := int(id)
 
 		// обновляем идентификатор добавленной у посылки
-		parcels[i].Number = lastId
+		parcels[i].Number = id
 
 		// сохраняем добавленную посылку в структуру map, чтобы её можно было легко достать по идентификатору посылки
-		parcelMap[lastId] = parcels[i]
+		parcelMap[id] = parcels[i]
 	}
 
 	// get by client // получите список посылок по идентификатору клиента, сохранённого в переменной client
